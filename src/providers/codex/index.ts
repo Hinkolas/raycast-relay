@@ -1,16 +1,16 @@
 import { mkdir } from "node:fs/promises";
 import {
   ProviderError,
-  type HistoryTurn,
   type ModelInfo,
   type Provider,
   type SendRequest,
   type SendResult,
   type UsageLimit,
 } from "../types";
+import { locateBinary } from "../locate";
+import { formatTranscript } from "../transcript";
 import { TurnActivity } from "./activity";
 import { AppServerConnection } from "./app-server";
-import { locateCodex } from "./locate";
 import type {
   GetAccountResponse,
   Model,
@@ -118,7 +118,14 @@ export class CodexProvider implements Provider {
   }
 
   private async open(): Promise<AppServerConnection> {
-    const { binary, env } = await locateCodex(this.options.binaryPath);
+    const { binary, env } = await locateBinary({
+      command: "codex",
+      label: "Codex CLI",
+      customPath: this.options.binaryPath,
+      preferenceTitle: "Codex CLI Path",
+      installHint:
+        "Install it with `npm install -g @openai/codex` or `brew install codex`, then sign in with `codex login`.",
+    });
     await mkdir(this.options.workingDirectory, { recursive: true });
 
     let connection: AppServerConnection;
@@ -284,15 +291,6 @@ function toUsageLimits(snapshot: RateLimitSnapshot): UsageLimit[] | undefined {
     windowMinutes: window.windowDurationMins ?? undefined,
     resetsAt: window.resetsAt ?? undefined,
   }));
-}
-
-/** Seeds a fresh thread with a conversation that was started in an earlier session. */
-function formatTranscript(history: HistoryTurn[]): string {
-  const turns = history.map((turn) => `<user>\n${turn.prompt}\n</user>\n<assistant>\n${turn.answer}\n</assistant>`);
-  return [
-    "This conversation is being continued from an earlier session. Here is the transcript so far; continue it naturally and don't mention that it was restored.",
-    `<transcript>\n${turns.join("\n")}\n</transcript>`,
-  ].join("\n\n");
 }
 
 function errorMessage(error: unknown): string {

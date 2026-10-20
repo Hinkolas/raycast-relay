@@ -31,7 +31,7 @@ function QuestionInput({ onSubmit }: { onSubmit: (question: string) => void }) {
 
   useEffect(() => {
     modelSettings.provider.warmUp();
-  }, []);
+  }, [modelSettings.provider]);
 
   return (
     <List

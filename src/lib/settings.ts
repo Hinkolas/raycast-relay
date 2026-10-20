@@ -1,11 +1,14 @@
 import { environment, getPreferenceValues } from "@raycast/api";
 import { join } from "node:path";
 import { CodexProvider } from "../providers/codex";
+import { OpenCodeProvider } from "../providers/opencode";
 import type { Provider, ProviderId } from "../providers/types";
 
 export interface Settings {
+  /** The provider from the preferences; it can be switched from the action panel. */
   providerId: ProviderId;
   codexPath?: string;
+  opencodePath?: string;
   webSearch: boolean;
   customInstructions?: string;
 }
@@ -15,23 +18,33 @@ export function getSettings(): Settings {
   return {
     providerId: preferences.provider ?? "codex",
     codexPath: preferences.codexPath?.trim() || undefined,
+    opencodePath: preferences.opencodePath?.trim() || undefined,
     webSearch: preferences.webSearch ?? true,
     customInstructions: preferences.customInstructions?.trim() || undefined,
   };
 }
 
-let provider: Provider | undefined;
+export const PROVIDERS: { id: ProviderId; name: string }[] = [
+  { id: "codex", name: "Codex" },
+  { id: "opencode", name: "OpenCode" },
+];
+
+const providers = new Map<ProviderId, Provider>();
 
 /**
- * Providers hold a running agent process, so one instance is shared by every view of a command.
- * Raycast restarts the command when preferences change, so the settings it was created with stay valid.
+ * Providers hold a running agent process or connection, so one instance per provider is shared by every view of a
+ * command. Raycast restarts the command when preferences change, so the settings it was created with stay valid.
  */
-export function getProvider(settings: Settings): Provider {
-  provider ??= new CodexProvider({
-    binaryPath: settings.codexPath,
-    workingDirectory: join(environment.supportPath, "workspace"),
-    clientVersion: "1.0.0",
-  });
+export function getProvider(id: ProviderId, settings: Settings): Provider {
+  let provider = providers.get(id);
+  if (!provider) {
+    const workingDirectory = join(environment.supportPath, "workspace");
+    provider =
+      id === "opencode"
+        ? new OpenCodeProvider({ binaryPath: settings.opencodePath, workingDirectory })
+        : new CodexProvider({ binaryPath: settings.codexPath, workingDirectory, clientVersion: "1.0.0" });
+    providers.set(id, provider);
+  }
   return provider;
 }
 

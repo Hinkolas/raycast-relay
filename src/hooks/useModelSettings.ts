@@ -2,9 +2,15 @@ import { showToast, Toast } from "@raycast/api";
 import { useCachedPromise, useCachedState } from "@raycast/utils";
 import { useMemo } from "react";
 import { effortLabel } from "../lib/format";
-import { getProvider, getSettings, type Settings } from "../lib/settings";
+import { getProvider, getSettings, PROVIDERS, type Settings } from "../lib/settings";
 import type { ModelChoice } from "../lib/types";
-import type { ModelInfo, Provider } from "../providers/types";
+import type { ModelInfo, Provider, ProviderId } from "../providers/types";
+
+/** A provider picked from the action panel. It's dropped when the provider preference changes. */
+interface StoredProviderChoice {
+  id: ProviderId;
+  preference: ProviderId;
+}
 
 interface StoredModelSettings {
   model?: string;
@@ -22,22 +28,28 @@ export interface ModelSettings {
   choice: ModelChoice;
   /** The reasoning effort picked by the user, if the selected model supports it. */
   effortOverride: string | undefined;
+  setProvider: (id: ProviderId) => void;
   setModel: (model: string | undefined) => void;
   setEffort: (effort: string | undefined) => void;
   setFast: (fast: boolean) => void;
 }
 
 /**
- * Model, reasoning effort and fast mode, chosen from the action panel and remembered across commands.
+ * Provider, model, reasoning effort and fast mode, chosen from the action panel and remembered across commands.
  * Cached state is read synchronously, so the very first question already uses the saved choice.
  */
 export function useModelSettings(): ModelSettings {
   const settings = useMemo(getSettings, []);
-  const provider = useMemo(() => getProvider(settings), [settings]);
+  const [providerChoice, setProviderChoice] = useCachedState<StoredProviderChoice | undefined>(
+    "provider-choice",
+    undefined,
+  );
+  const providerId = providerChoice?.preference === settings.providerId ? providerChoice.id : settings.providerId;
+  const provider = useMemo(() => getProvider(providerId, settings), [providerId, settings]);
   const [stored, setStored] = useCachedState<StoredModelSettings>(`model-settings:${provider.id}`, {});
-  const { data } = useCachedPromise(() => provider.listModels(), [], {
-    keepPreviousData: true,
-    // Setup problems (Codex missing, signed out) are reported when sending; no need for a second toast.
+  const { data } = useCachedPromise((id: ProviderId) => getProvider(id, settings).listModels(), [providerId], {
+    keepPreviousData: false,
+    // Setup problems (agent missing, signed out) are reported when sending; no need for a second toast.
     onError: () => undefined,
   });
   // Models cached by an older version of the extension lack newer fields; skip them until fresh data arrives.
@@ -62,6 +74,14 @@ export function useModelSettings(): ModelSettings {
     selectedModel,
     choice,
     effortOverride,
+    setProvider: (id) => {
+      setProviderChoice({ id, preference: settings.providerId });
+      getProvider(id, settings).warmUp();
+      showToast({
+        style: Toast.Style.Success,
+        title: `Provider: ${PROVIDERS.find((candidate) => candidate.id === id)?.name ?? id}`,
+      });
+    },
     setModel: (model) => setStored((current) => ({ ...current, model })),
     setEffort: (effort) => {
       setStored((current) => ({ ...current, effort }));

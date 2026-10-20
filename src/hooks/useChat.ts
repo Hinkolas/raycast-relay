@@ -29,7 +29,7 @@ const RENDER_INTERVAL_MS = 75;
 export function useChat(options: { persist?: boolean } = {}): Chat {
   const modelSettings = useModelSettings();
   const { settings, provider } = modelSettings;
-  const [conversation, setConversation] = useState(() => createConversation(settings.providerId));
+  const [conversation, setConversation] = useState(() => createConversation(provider.id));
   const [isPersistent, setPersistent] = useState(options.persist ?? false);
   const [savedAt, setSavedAt] = useState(0);
   const abortController = useRef<AbortController | null>(null);
@@ -39,7 +39,7 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
   // and the agent process ends together with the command.
   useEffect(() => {
     provider.warmUp();
-  }, []);
+  }, [provider]);
 
   const isStreaming = conversation.exchanges.some((exchange) => exchange.status === "streaming");
 
@@ -169,7 +169,7 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
     },
     startNew: () => {
       detach();
-      setConversation(createConversation(settings.providerId));
+      setConversation(createConversation(provider.id));
     },
     persist: () => setPersistent(true),
   };

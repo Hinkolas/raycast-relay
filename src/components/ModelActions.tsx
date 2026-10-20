@@ -1,10 +1,19 @@
 import { Action, ActionPanel, Color, Icon } from "@raycast/api";
 import type { ModelSettings } from "../hooks/useModelSettings";
 import { effortLabel } from "../lib/format";
+import { PROVIDERS } from "../lib/settings";
+import type { ModelInfo } from "../providers/types";
 
 const selected = (isSelected: boolean) => (isSelected ? Icon.Checkmark : Icon.Circle);
 
-/** Model, reasoning effort and fast mode. The choice applies to the next message and is remembered. */
+/** Models in the order the provider lists them, split into sections when they come from several sources. */
+function groupModels(models: ModelInfo[]): { title?: string; models: ModelInfo[] }[] {
+  const groups = new Map<string | undefined, ModelInfo[]>();
+  for (const model of models) groups.set(model.group, [...(groups.get(model.group) ?? []), model]);
+  return [...groups].map(([title, models]) => ({ title, models }));
+}
+
+/** Provider, model, reasoning effort and fast mode. The choice applies to the next message and is remembered. */
 export function ModelActions({ modelSettings }: { modelSettings: ModelSettings }) {
   const { models, selectedModel, choice, effortOverride, provider } = modelSettings;
   const defaultModel = models.find((model) => model.isDefault);
@@ -12,6 +21,20 @@ export function ModelActions({ modelSettings }: { modelSettings: ModelSettings }
 
   return (
     <ActionPanel.Section title="Model">
+      <ActionPanel.Submenu
+        title={`Provider: ${provider.name}`}
+        icon={Icon.Plug}
+        shortcut={{ modifiers: ["cmd", "shift"], key: "a" }}
+      >
+        {PROVIDERS.map((candidate) => (
+          <Action
+            key={candidate.id}
+            title={candidate.name}
+            icon={selected(candidate.id === provider.id)}
+            onAction={() => modelSettings.setProvider(candidate.id)}
+          />
+        ))}
+      </ActionPanel.Submenu>
       <ActionPanel.Submenu
         title={`Model: ${selectedModel?.name ?? choice.model ?? `${provider.name} Default`}`}
         icon={Icon.Stars}
@@ -22,13 +45,17 @@ export function ModelActions({ modelSettings }: { modelSettings: ModelSettings }
           icon={selected(choice.model === undefined)}
           onAction={() => modelSettings.setModel(undefined)}
         />
-        {models.map((model) => (
-          <Action
-            key={model.id}
-            title={model.name}
-            icon={selected(model.id === choice.model)}
-            onAction={() => modelSettings.setModel(model.id)}
-          />
+        {groupModels(models).map((group) => (
+          <ActionPanel.Section key={group.title ?? "models"} title={group.title}>
+            {group.models.map((model) => (
+              <Action
+                key={model.id}
+                title={model.name}
+                icon={selected(model.id === choice.model)}
+                onAction={() => modelSettings.setModel(model.id)}
+              />
+            ))}
+          </ActionPanel.Section>
         ))}
       </ActionPanel.Submenu>
       {efforts.length > 0 ? (
