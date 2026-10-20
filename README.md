@@ -20,7 +20,7 @@ Both commands take an optional argument, so you can type `Ask Question ⇥ your 
 
 While the agent works you see a live timeline: web searches with their queries, pages it reads, and reasoning steps titled by the model's own summary (e.g. _Comparing sources_). Once the answer arrives, the timeline collapses into one line like _Searched the web 2 times · Thought for 4s_.
 
-The details sidebar of Ask Question (<kbd>⌘ I</kbd>) lists the model, reasoning effort and speed, every step with its duration, the sources the answer cites, token usage and how much of your plan's usage limit is left. In Quick Chat, <kbd>⌘ I</kbd> shows a compact version below each answer.
+The sidebar of Ask Question (<kbd>⌘ I</kbd>) summarizes the answer: the model, reasoning effort and speed it used, every page behind it (cited links and pages the agent read), and one line of stats with the duration, tokens and how much of your plan's usage limit is used. In Quick Chat, <kbd>⌘ I</kbd> shows the same summary below each answer.
 
 ### Model controls
 

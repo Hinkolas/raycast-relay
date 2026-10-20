@@ -144,12 +144,17 @@ export class TurnActivity {
 function describeWebSearch(
   action: WebSearchAction | null,
   query: string,
-): Pick<AgentStep, "kind" | "title" | "detail"> {
+): Pick<AgentStep, "kind" | "title" | "detail" | "url"> {
   switch (action?.type) {
     case "openPage":
-      return { kind: "browse", title: "Read a page", detail: hostname(action.url) };
+      return { kind: "browse", title: "Read a page", detail: hostname(action.url), url: action.url ?? undefined };
     case "findInPage":
-      return { kind: "browse", title: "Searched a page", detail: action.pattern ?? hostname(action.url) };
+      return {
+        kind: "browse",
+        title: "Searched a page",
+        detail: action.pattern ?? hostname(action.url),
+        url: action.url ?? undefined,
+      };
     case "search":
       return {
         kind: "search",

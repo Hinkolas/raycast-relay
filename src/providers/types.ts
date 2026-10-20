@@ -23,6 +23,8 @@ export interface AgentStep {
   title: string;
   /** Extra context such as the search query or the page that was read. */
   detail?: string;
+  /** The page a browsing step opened. */
+  url?: string;
   status: "running" | "done" | "failed";
   startedAt: number;
   completedAt?: number;

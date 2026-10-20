@@ -89,7 +89,7 @@ function timelineMarkdown(steps: AgentStep[]): string {
 }
 
 /** Drops brief reasoning without a summary; it says nothing beyond "Thought". */
-export function visibleSteps(steps: AgentStep[]): AgentStep[] {
+function visibleSteps(steps: AgentStep[]): AgentStep[] {
   return steps.filter(
     (step) =>
       step.kind !== "thinking" ||
@@ -136,21 +136,37 @@ export interface Source {
   domain: string;
 }
 
-/** Links the answer cites, deduplicated by URL. */
-export function extractSources(markdown: string): Source[] {
+/** Every page behind an answer: the links it cites first, then pages the agent opened while browsing. */
+export function collectSources(exchange: Exchange): Source[] {
   const sources = new Map<string, Source>();
-  for (const match of markdown.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g)) {
-    const url = match[2];
-    const key = url.replace(/#.*$/, "");
-    if (sources.has(key)) continue;
+  const add = (url: string, title?: string) => {
+    let parsed: URL;
     try {
-      const domain = new URL(url).hostname.replace(/^www\./, "");
-      sources.set(key, { title: match[1].replace(/[*_`]/g, ""), url, domain });
+      parsed = new URL(url);
     } catch {
-      // Not a valid URL.
+      return;
     }
+    const key = pageKey(parsed);
+    if (sources.has(key)) return;
+    const domain = parsed.hostname.replace(/^www\./, "");
+    const path = parsed.pathname.replace(/\/$/, "");
+    sources.set(key, { title: title || `${domain}${path}`, url, domain });
+  };
+
+  for (const match of exchange.answer.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g)) {
+    add(match[2], match[1].replace(/[*_`]/g, ""));
+  }
+  for (const step of exchange.steps ?? []) {
+    if (step.url) add(step.url);
   }
   return [...sources.values()];
+}
+
+/** Identifies a page regardless of fragments, tracking parameters and trailing slashes. */
+function pageKey(url: URL): string {
+  const params = [...url.searchParams].filter(([name]) => !name.startsWith("utm_"));
+  const query = new URLSearchParams(params).toString();
+  return `${url.hostname.replace(/^www\./, "")}${url.pathname.replace(/\/$/, "")}${query ? `?${query}` : ""}`;
 }
 
 /** The whole conversation as Markdown, for copying. */
