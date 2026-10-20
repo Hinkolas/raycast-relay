@@ -1,10 +1,10 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "agent-proxy",
-  "title": "Agent Proxy",
-  "description": "Ask quick questions and chat with AI right in Raycast, powered by the coding agents you already have installed (Codex CLI, more providers coming soon). No API keys, no extra subscription.",
+  "name": "relay",
+  "title": "Relay AI",
+  "description": "Ask quick questions and chat with AI right in Raycast, relayed to the coding agents you already have installed (Codex CLI, more providers coming soon). No API keys, no extra subscription.",
   "icon": "extension-icon.png",
-  "author": "hinkolas",
+  "author": "Hinkolas",
   "categories": [
     "Productivity",
     "Developer Tools"
@@ -17,7 +17,7 @@
     {
       "name": "ask",
       "title": "Ask Question",
-      "subtitle": "Agent Proxy",
+      "subtitle": "Relay AI",
       "description": "Get a quick answer without starting a chat. Assign it as a fallback command to ask straight from the root search.",
       "keywords": [
         "ai",
@@ -39,7 +39,7 @@
     {
       "name": "chat",
       "title": "Quick Chat",
-      "subtitle": "Agent Proxy",
+      "subtitle": "Relay AI",
       "description": "Chat with AI inside Raycast. Optionally start with a message; switch between earlier chats from the dropdown.",
       "keywords": [
         "ai",

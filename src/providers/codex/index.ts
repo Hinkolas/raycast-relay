@@ -127,7 +127,7 @@ export class CodexProvider implements Provider {
         binary,
         env,
         cwd: this.options.workingDirectory,
-        clientInfo: { name: "raycast_agent_proxy", title: "Raycast Agent Proxy", version: this.options.clientVersion },
+        clientInfo: { name: "raycast_relay", title: "Raycast Relay", version: this.options.clientVersion },
       });
     } catch (error) {
       throw new ProviderError(

@@ -5,7 +5,7 @@ import type { Exchange } from "../lib/types";
 type Tag = { text: string; color?: Color; icon?: Image.ImageLike; url?: string };
 type Row =
   | { type: "tags"; title: string; tags: Tag[] }
-  | { type: "label"; title: string; text: string; color?: Color }
+  | { type: "label"; title: string; text: string; color?: Color; icon?: Image.ImageLike }
   | { type: "separator" };
 
 /**
@@ -13,11 +13,21 @@ type Row =
  * What the agent did step by step is shown in the answer itself while it works.
  */
 function summaryRows(exchange: Exchange, providerName: string): Row[] {
+  // "GPT-6.1-Sol · High · Fast", with a bolt in front when fast mode was on.
   const { choice } = exchange;
-  const tags: Tag[] = [{ text: choice?.modelName ?? choice?.model ?? `${providerName} Default`, color: Color.Purple }];
-  if (choice?.effort) tags.push({ text: effortLabel(choice.effort), color: Color.Blue });
-  if (choice?.fast) tags.push({ text: "Fast", color: Color.Yellow, icon: Icon.Bolt });
-  const rows: Row[] = [{ type: "tags", title: "Model", tags }];
+  const model = [
+    choice?.modelName ?? choice?.model ?? `${providerName} Default`,
+    choice?.effort ? effortLabel(choice.effort) : undefined,
+    choice?.fast ? "Fast" : undefined,
+  ];
+  const rows: Row[] = [
+    {
+      type: "label",
+      title: "Model",
+      text: model.filter(Boolean).join(" · "),
+      icon: choice?.fast ? { source: Icon.Bolt, tintColor: Color.Yellow } : undefined,
+    },
+  ];
 
   // One row of clickable chips: Raycast gives every link row its own caption line, which spreads a list apart.
   const sources = collectSources(exchange);
@@ -87,6 +97,7 @@ export function DetailMetadata({ exchange, providerName }: { exchange: Exchange;
                 key={index}
                 title={row.title}
                 text={row.color ? { value: row.text, color: row.color } : row.text}
+                icon={row.icon}
               />
             );
           case "separator":
@@ -122,6 +133,7 @@ export function ListMetadata({ exchange, providerName }: { exchange: Exchange; p
                 key={index}
                 title={row.title}
                 text={row.color ? { value: row.text, color: row.color } : row.text}
+                icon={row.icon}
               />
             );
           case "separator":

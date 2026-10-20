@@ -1,4 +1,4 @@
-# Agent Proxy Changelog
+# Relay AI Changelog
 
 ## [Initial Version] - {PR_MERGE_DATE}
 

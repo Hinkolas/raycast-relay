@@ -38,7 +38,7 @@ let shellPath: Promise<string[]> | undefined;
 function loginShellPath(): Promise<string[]> {
   shellPath ??= new Promise((resolve) => {
     const shell = process.env.SHELL || "/bin/zsh";
-    const marker = "__AGENT_PROXY_PATH__";
+    const marker = "__RELAY_PATH__";
     execFile(shell, ["-ilc", `printf '${marker}%s${marker}' "$PATH"`], { timeout: 5000 }, (_error, stdout) => {
       const match = String(stdout ?? "").match(new RegExp(`${marker}(.*?)${marker}`));
       resolve(match ? match[1].split(":").filter(Boolean) : []);
