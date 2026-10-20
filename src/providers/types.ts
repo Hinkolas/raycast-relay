@@ -1,11 +1,11 @@
 /**
- * Provider abstraction. A provider wraps a locally installed agent harness (Codex CLI, OpenCode; Claude Code
- * later) and turns it into a plain "send a message, stream the answer" interface.
+ * Provider abstraction. A provider wraps a locally installed agent harness (Codex CLI, OpenCode, Claude Code) and
+ * turns it into a plain "send a message, stream the answer" interface.
  *
  * Providers must not import `@raycast/api`, so they stay testable from plain Node.
  */
 
-export type ProviderId = "codex" | "opencode";
+export type ProviderId = "codex" | "opencode" | "claude";
 
 /** A completed question/answer pair, used to give the agent the earlier context of a conversation. */
 export interface HistoryTurn {

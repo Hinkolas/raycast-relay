@@ -1,13 +1,16 @@
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { ProviderError } from "./types";
 
 export interface Installation {
   binary: string;
-  /** Environment for the spawned process, with a PATH that also works for npm-installed (node) shims. */
+  /**
+   * Environment for the spawned process, with a PATH that also works for npm-installed (node) shims. USER is set
+   * too: tools such as Claude Code look up their keychain credentials by it.
+   */
   env: NodeJS.ProcessEnv;
 }
 
@@ -17,6 +20,7 @@ const home = homedir();
 const FALLBACK_DIRS = [
   join(home, ".local/bin"),
   join(home, ".opencode/bin"),
+  join(home, ".claude/local"),
   "/opt/homebrew/bin",
   "/usr/local/bin",
   join(home, ".npm-global/bin"),
@@ -107,5 +111,5 @@ export async function locateBinary(options: LocateOptions): Promise<Installation
   }
 
   const PATH = [...new Set([dirname(binary), ...searchDirs])].join(delimiter);
-  return { binary, env: { ...process.env, PATH } };
+  return { binary, env: { ...process.env, PATH, USER: process.env.USER || userInfo().username } };
 }

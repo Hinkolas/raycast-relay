@@ -1,5 +1,6 @@
 import { environment, getPreferenceValues } from "@raycast/api";
 import { join } from "node:path";
+import { ClaudeCodeProvider } from "../providers/claude";
 import { CodexProvider } from "../providers/codex";
 import { OpenCodeProvider } from "../providers/opencode";
 import type { Provider, ProviderId } from "../providers/types";
@@ -9,6 +10,7 @@ export interface Settings {
   providerId: ProviderId;
   codexPath?: string;
   opencodePath?: string;
+  claudePath?: string;
   webSearch: boolean;
   customInstructions?: string;
 }
@@ -19,6 +21,7 @@ export function getSettings(): Settings {
     providerId: preferences.provider ?? "codex",
     codexPath: preferences.codexPath?.trim() || undefined,
     opencodePath: preferences.opencodePath?.trim() || undefined,
+    claudePath: preferences.claudePath?.trim() || undefined,
     webSearch: preferences.webSearch ?? true,
     customInstructions: preferences.customInstructions?.trim() || undefined,
   };
@@ -27,6 +30,7 @@ export function getSettings(): Settings {
 export const PROVIDERS: { id: ProviderId; name: string }[] = [
   { id: "codex", name: "Codex" },
   { id: "opencode", name: "OpenCode" },
+  { id: "claude", name: "Claude Code" },
 ];
 
 const providers = new Map<ProviderId, Provider>();
@@ -39,10 +43,16 @@ export function getProvider(id: ProviderId, settings: Settings): Provider {
   let provider = providers.get(id);
   if (!provider) {
     const workingDirectory = join(environment.supportPath, "workspace");
-    provider =
-      id === "opencode"
-        ? new OpenCodeProvider({ binaryPath: settings.opencodePath, workingDirectory })
-        : new CodexProvider({ binaryPath: settings.codexPath, workingDirectory, clientVersion: "1.0.0" });
+    switch (id) {
+      case "opencode":
+        provider = new OpenCodeProvider({ binaryPath: settings.opencodePath, workingDirectory });
+        break;
+      case "claude":
+        provider = new ClaudeCodeProvider({ binaryPath: settings.claudePath, workingDirectory });
+        break;
+      default:
+        provider = new CodexProvider({ binaryPath: settings.codexPath, workingDirectory, clientVersion: "1.0.0" });
+    }
     providers.set(id, provider);
   }
   return provider;
