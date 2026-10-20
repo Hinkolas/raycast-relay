@@ -1,17 +1,21 @@
 import { Action, ActionPanel, Detail, Icon, Keyboard, openExtensionPreferences } from "@raycast/api";
+import { useCachedState } from "@raycast/utils";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "../hooks/useChat";
-import { exchangeMarkdown } from "../lib/format";
-import { ChatView, modelLabel } from "./ChatView";
-import { ModelSubmenu } from "./ModelSubmenu";
+import { choiceSummary, exchangeMarkdown } from "../lib/format";
+import { ChatView } from "./ChatView";
+import { DetailMetadata } from "./ExchangeMetadata";
+import { ModelActions } from "./ModelActions";
 
 /**
- * Answers a single question in a full-width view. "Continue in Chat" turns the same conversation into a chat
- * in place, so a still-streaming answer simply keeps going there.
+ * Answers a single question in a full-width view with a details sidebar. "Continue in Chat" turns the same
+ * conversation into a chat in place, so a still-streaming answer simply keeps going there.
  */
 export function AnswerView({ question, onAskAnother }: { question: string; onAskAnother: () => void }) {
   const chat = useChat();
+  const { modelSettings } = chat;
   const [isChatting, setChatting] = useState(false);
+  const [showDetails, setShowDetails] = useCachedState("show-details", true);
   const asked = useRef(false);
 
   useEffect(() => {
@@ -26,16 +30,6 @@ export function AnswerView({ question, onAskAnother }: { question: string; onAsk
   const answer = exchange?.answer;
   const failed = exchange?.status === "error";
 
-  const continueInChat = (
-    <Action
-      title="Continue in Chat"
-      icon={Icon.Bubble}
-      onAction={() => {
-        chat.persist();
-        setChatting(true);
-      }}
-    />
-  );
   const retry = exchange ? (
     <Action
       title={failed ? "Try Again" : "Regenerate Answer"}
@@ -47,14 +41,26 @@ export function AnswerView({ question, onAskAnother }: { question: string; onAsk
 
   return (
     <Detail
-      navigationTitle={`Ask ${modelLabel(chat)}`}
+      navigationTitle={choiceSummary(modelSettings.choice, modelSettings.provider.name)}
       isLoading={chat.isStreaming}
-      markdown={exchange ? exchangeMarkdown(exchange, chat.activity) : ""}
+      markdown={exchange ? exchangeMarkdown(exchange) : ""}
+      metadata={
+        showDetails && exchange ? (
+          <DetailMetadata exchange={exchange} providerName={modelSettings.provider.name} />
+        ) : undefined
+      }
       actions={
         <ActionPanel>
           <ActionPanel.Section>
             {failed && !chat.isStreaming ? retry : null}
-            {continueInChat}
+            <Action
+              title="Continue in Chat"
+              icon={Icon.Bubble}
+              onAction={() => {
+                chat.persist();
+                setChatting(true);
+              }}
+            />
             {answer ? (
               <Action.CopyToClipboard title="Copy Answer" content={answer} shortcut={Keyboard.Shortcut.Common.Copy} />
             ) : null}
@@ -80,10 +86,19 @@ export function AnswerView({ question, onAskAnother }: { question: string; onAsk
               title="Ask Another Question"
               icon={Icon.QuestionMarkCircle}
               shortcut={Keyboard.Shortcut.Common.New}
-              onAction={onAskAnother}
+              onAction={() => {
+                chat.stop();
+                onAskAnother();
+              }}
             />
-            <ModelSubmenu chat={chat} />
+            <Action
+              title={showDetails ? "Hide Details" : "Show Details"}
+              icon={Icon.Sidebar}
+              shortcut={{ modifiers: ["cmd"], key: "i" }}
+              onAction={() => setShowDetails(!showDetails)}
+            />
           </ActionPanel.Section>
+          <ModelActions modelSettings={modelSettings} />
           <ActionPanel.Section>
             <Action title="Open Extension Preferences" icon={Icon.Gear} onAction={openExtensionPreferences} />
           </ActionPanel.Section>

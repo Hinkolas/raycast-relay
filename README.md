@@ -14,6 +14,24 @@ Providers:
 | **Ask Question** | One question, one answer, no chat to manage. Press <kbd>↵</kbd> on the answer to **Continue in Chat** when you have a follow-up.                         |
 | **Quick Chat**   | A classic chat. The search bar is the message box, each exchange is a list item and the detail pane shows the answer. Earlier chats are in the dropdown. |
 
+Both commands take an optional argument, so you can type `Ask Question ⇥ your question` or `Quick Chat ⇥ your message` straight from the root search.
+
+### See what the agent is doing
+
+While the agent works you see a live timeline: web searches with their queries, pages it reads, and reasoning steps titled by the model's own summary (e.g. _Comparing sources_). Once the answer arrives, the timeline collapses into one line like _Searched the web 2 times · Thought for 4s_.
+
+The details sidebar of Ask Question (<kbd>⌘ I</kbd>) lists the model, reasoning effort and speed, every step with its duration, the sources the answer cites, token usage and how much of your plan's usage limit is left. In Quick Chat, <kbd>⌘ I</kbd> shows a compact version below each answer.
+
+### Model controls
+
+From the action panel (<kbd>⌘ K</kbd>), also before you ask:
+
+- **Model** (<kbd>⌘ ⇧ M</kbd>): any model your Codex account offers.
+- **Reasoning** (<kbd>⌘ ⇧ R</kbd>): the efforts the selected model supports, from Low to Ultra. Lower is faster.
+- **Fast Mode** (<kbd>⌘ ⇧ F</kbd>): the model's faster service tier, when it has one (uses more of your plan's quota).
+
+Your choice is remembered and applies to both commands.
+
 ### Use Ask Question as a fallback command
 
 1. Open Raycast Settings → Extensions, select **Ask Question** and assign it as a **Fallback Command** (or right-click it in the root search → _Manage Fallback Commands_).
@@ -30,6 +48,9 @@ Providers:
 | Regenerate Answer | <kbd>⌘ R</kbd>   |
 | New Chat          | <kbd>⌘ N</kbd>   |
 | Change Model      | <kbd>⌘ ⇧ M</kbd> |
+| Reasoning Effort  | <kbd>⌘ ⇧ R</kbd> |
+| Toggle Fast Mode  | <kbd>⌘ ⇧ F</kbd> |
+| Show/Hide Details | <kbd>⌘ I</kbd>   |
 | Delete Chat       | <kbd>⌃ D</kbd>   |
 
 ## Setup
@@ -42,10 +63,9 @@ The extension finds `codex` through your login shell's `PATH` and common install
 
 ## Preferences
 
-- **Reasoning Effort**: lower is faster. _Model Default_ uses whatever the model prefers.
 - **Web Search**: lets the agent search the web for current information.
 - **Custom Instructions**: added to every conversation, e.g. "Answer in German".
-- **Model**: pick one with **Change Model** (<kbd>⌘ ⇧ M</kbd>) in any answer. The choice is remembered.
+- **Codex CLI Path**: only needed when `codex` isn't found automatically.
 
 ## How it works
 

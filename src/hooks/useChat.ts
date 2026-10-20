@@ -1,60 +1,44 @@
 import { showToast, Toast } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
 import { randomUUID } from "node:crypto";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { buildInstructions, getProvider, getSettings } from "../lib/settings";
-import { getSelectedModel, saveConversation, setSelectedModel } from "../lib/storage";
+import { useEffect, useRef, useState } from "react";
+import { buildInstructions } from "../lib/settings";
+import { saveConversation } from "../lib/storage";
 import type { Conversation, Exchange } from "../lib/types";
-import { ProviderError, type HistoryTurn, type ModelInfo, type Provider, type ProviderId } from "../providers/types";
+import { ProviderError, type HistoryTurn, type ProviderId, type StreamUpdate } from "../providers/types";
+import { useModelSettings, type ModelSettings } from "./useModelSettings";
 
 export interface Chat {
   conversation: Conversation;
-  provider: Provider;
-  /** Selected model id; `undefined` means the provider's default. */
-  model: string | undefined;
-  models: ModelInfo[];
+  modelSettings: ModelSettings;
   isStreaming: boolean;
-  /** What the agent is doing while it isn't writing, e.g. "Searching the web…". */
-  activity: string | undefined;
   /** Changes whenever the conversation was written to storage. */
   savedAt: number;
   send: (prompt: string) => void;
   /** Asks the question of an exchange again, dropping it and everything after it. */
   retry: (exchangeId: string) => void;
   stop: () => void;
-  setModel: (model: string | undefined) => void;
   open: (conversation: Conversation) => void;
   startNew: () => void;
   /** Start saving this conversation to the chat history. */
   persist: () => void;
 }
 
-/** How long streamed text is buffered before re-rendering. Tokens arrive far faster than that. */
+/** How long streamed updates are buffered before re-rendering. Tokens arrive far faster than that. */
 const RENDER_INTERVAL_MS = 75;
 
 export function useChat(options: { persist?: boolean } = {}): Chat {
-  const settings = useMemo(getSettings, []);
-  const provider = useMemo(() => getProvider(settings), [settings]);
+  const modelSettings = useModelSettings();
+  const { settings, provider } = modelSettings;
   const [conversation, setConversation] = useState(() => createConversation(settings.providerId));
   const [isPersistent, setPersistent] = useState(options.persist ?? false);
-  const [activity, setActivity] = useState<string>();
-  const [model, setModelState] = useState<string>();
   const [savedAt, setSavedAt] = useState(0);
-  const modelPromise = useRef<Promise<string | undefined>>(undefined);
   const abortController = useRef<AbortController | null>(null);
 
-  const { data: models = [] } = useCachedPromise(() => provider.listModels(), [], {
-    keepPreviousData: true,
-    // Setup problems (Codex missing, signed out) are reported when sending; no need for a second toast.
-    onError: () => undefined,
-  });
-
+  // No abort on cleanup: Raycast renders in StrictMode during development, which runs this cleanup right after
+  // mounting and would cancel the first question. Views that leave a running answer behind stop it explicitly,
+  // and the agent process ends together with the command.
   useEffect(() => {
     provider.warmUp();
-    const selected = getSelectedModel(settings.providerId);
-    modelPromise.current = selected;
-    selected.then(setModelState);
-    return () => abortController.current?.abort();
   }, []);
 
   const isStreaming = conversation.exchanges.some((exchange) => exchange.status === "streaming");
@@ -79,7 +63,16 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
     const controller = new AbortController();
     abortController.current = controller;
     const conversationId = conversation.id;
-    const exchange: Exchange = { id: randomUUID(), prompt, answer: "", status: "streaming", createdAt: Date.now() };
+    const choice = modelSettings.choice;
+    const exchange: Exchange = {
+      id: randomUUID(),
+      prompt,
+      answer: "",
+      status: "streaming",
+      createdAt: Date.now(),
+      choice,
+      steps: [],
+    };
     setConversation((current) => ({
       ...current,
       title: previous.length === 0 ? titleFor(prompt) : current.title,
@@ -100,13 +93,12 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
     // Detached runs (the user switched conversations) must not touch shared state anymore.
     const isCurrent = () => abortController.current === controller;
 
-    let pending: { text: string; activity?: string } | undefined;
+    let pending: StreamUpdate | undefined;
     let timer: NodeJS.Timeout | undefined;
     const flush = () => {
       timer = undefined;
       if (!pending || !isCurrent()) return;
-      update({ answer: pending.text });
-      setActivity(pending.activity);
+      update({ answer: pending.text, steps: pending.steps });
       pending = undefined;
     };
     const stopFlushing = () => {
@@ -115,13 +107,13 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
     };
 
     try {
-      const selectedModel = await modelPromise.current;
       const result = await provider.send({
         conversationId,
         history: toHistory(previous),
         prompt,
-        model: selectedModel,
-        reasoningEffort: settings.reasoningEffort,
+        model: choice.model,
+        reasoningEffort: choice.effort,
+        fast: choice.fast,
         instructions: buildInstructions(settings),
         webSearch: settings.webSearch,
         signal: controller.signal,
@@ -131,18 +123,26 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
         },
       });
       stopFlushing();
-      update({ answer: result.text, status: result.interrupted ? "cancelled" : "done", model: selectedModel });
+      update({
+        answer: result.text,
+        steps: result.steps,
+        usage: result.usage,
+        limits: result.limits,
+        status: result.interrupted ? "cancelled" : "done",
+        completedAt: Date.now(),
+      });
     } catch (error) {
       stopFlushing();
       const title = error instanceof Error ? error.message : String(error);
       const hint = error instanceof ProviderError ? error.hint : undefined;
-      update({ status: "error", error: hint ? `**${title}**\n\n${hint}` : `**${title}**` });
+      update({
+        status: "error",
+        error: hint ? `**${title}**\n\n${hint}` : `**${title}**`,
+        completedAt: Date.now(),
+      });
       if (isCurrent()) await showToast({ style: Toast.Style.Failure, title, message: hint });
     } finally {
-      if (isCurrent()) {
-        abortController.current = null;
-        setActivity(undefined);
-      }
+      if (isCurrent()) abortController.current = null;
     }
   }
 
@@ -150,16 +150,12 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
   function detach() {
     abortController.current?.abort();
     abortController.current = null;
-    setActivity(undefined);
   }
 
   return {
     conversation,
-    provider,
-    model,
-    models,
+    modelSettings,
     isStreaming,
-    activity,
     savedAt,
     send: (prompt) => void run(prompt, conversation.exchanges),
     retry: (exchangeId) => {
@@ -167,11 +163,6 @@ export function useChat(options: { persist?: boolean } = {}): Chat {
       if (index !== -1) void run(conversation.exchanges[index].prompt, conversation.exchanges.slice(0, index));
     },
     stop: () => abortController.current?.abort(),
-    setModel: (next) => {
-      setModelState(next);
-      modelPromise.current = Promise.resolve(next);
-      void setSelectedModel(settings.providerId, next);
-    },
     open: (next) => {
       detach();
       setConversation(next);

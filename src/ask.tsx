@@ -1,6 +1,9 @@
 import { Action, ActionPanel, Icon, List, type LaunchProps } from "@raycast/api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnswerView } from "./components/AnswerView";
+import { ModelActions } from "./components/ModelActions";
+import { useModelSettings } from "./hooks/useModelSettings";
+import { choiceSummary } from "./lib/format";
 
 export default function AskQuestion(props: LaunchProps<{ arguments: Arguments.Ask }>) {
   // When used as a fallback command, the root search text arrives as `fallbackText`.
@@ -22,27 +25,34 @@ export default function AskQuestion(props: LaunchProps<{ arguments: Arguments.As
 }
 
 function QuestionInput({ onSubmit }: { onSubmit: (question: string) => void }) {
+  const modelSettings = useModelSettings();
   const [text, setText] = useState("");
   const question = text.trim();
 
+  useEffect(() => {
+    modelSettings.provider.warmUp();
+  }, []);
+
   return (
     <List
-      navigationTitle="Ask Question"
+      navigationTitle={choiceSummary(modelSettings.choice, modelSettings.provider.name)}
       searchBarPlaceholder="Ask a question…"
       searchText={text}
       onSearchTextChange={setText}
       filtering={false}
     >
       <List.EmptyView
-        icon={Icon.QuestionMarkCircle}
+        icon={{ source: "empty-icon.png" }}
         title={question ? "Press ↵ to Ask" : "Ask a Quick Question"}
-        description="Get one answer without starting a chat. Tip: add Ask Question as a fallback command to ask straight from Raycast's root search."
+        description={
+          "One answer, no chat to manage. Continue in a chat if you have a follow-up.\n" +
+          "Tip: add Ask Question as a fallback command to ask straight from the root search."
+        }
         actions={
-          question ? (
-            <ActionPanel>
-              <Action title="Ask" icon={Icon.ArrowRight} onAction={() => onSubmit(question)} />
-            </ActionPanel>
-          ) : undefined
+          <ActionPanel>
+            {question ? <Action title="Ask" icon={Icon.ArrowRight} onAction={() => onSubmit(question)} /> : null}
+            <ModelActions modelSettings={modelSettings} />
+          </ActionPanel>
         }
       />
     </List>

@@ -12,13 +12,14 @@ import {
   Toast,
   type Image,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
+import { useCachedPromise, useCachedState } from "@raycast/utils";
 import { useEffect, useState } from "react";
 import type { Chat } from "../hooks/useChat";
-import { conversationMarkdown, exchangeMarkdown, firstLine } from "../lib/format";
+import { choiceSummary, conversationMarkdown, exchangeMarkdown, firstLine } from "../lib/format";
 import { deleteAllConversations, deleteConversation, loadConversations } from "../lib/storage";
 import type { Exchange } from "../lib/types";
-import { ModelSubmenu } from "./ModelSubmenu";
+import { ListMetadata } from "./ExchangeMetadata";
+import { ModelActions } from "./ModelActions";
 
 const NEW_CHAT = "new-chat";
 
@@ -27,8 +28,11 @@ const NEW_CHAT = "new-chat";
  * (newest first), and the detail pane shows the selected answer.
  */
 export function ChatView({ chat }: { chat: Chat }) {
-  const { conversation } = chat;
+  const { conversation, modelSettings } = chat;
+  const providerName = modelSettings.provider.name;
   const [draft, setDraft] = useState("");
+  // Off by default: below a chat answer the details take reading space, unlike the sidebar of Ask Question.
+  const [showDetails, setShowDetails] = useCachedState("show-chat-details", false);
   const [selectedId, setSelectedId] = useState<string>();
   const { data: savedConversations = [], revalidate } = useCachedPromise(loadConversations, [], {
     keepPreviousData: true,
@@ -142,7 +146,14 @@ export function ChatView({ chat }: { chat: Chat }) {
               onAction={chat.startNew}
             />
           ) : null}
-          <ModelSubmenu chat={chat} />
+          {hasMessages ? (
+            <Action
+              title={showDetails ? "Hide Details" : "Show Details"}
+              icon={Icon.Sidebar}
+              shortcut={{ modifiers: ["cmd"], key: "i" }}
+              onAction={() => setShowDetails(!showDetails)}
+            />
+          ) : null}
           {hasMessages ? (
             <Action.CopyToClipboard
               title="Copy Chat"
@@ -151,6 +162,7 @@ export function ChatView({ chat }: { chat: Chat }) {
             />
           ) : null}
         </ActionPanel.Section>
+        <ModelActions modelSettings={modelSettings} />
         <ActionPanel.Section>
           {isSaved ? (
             <Action
@@ -224,7 +236,12 @@ export function ChatView({ chat }: { chat: Chat }) {
             icon={statusIcon(exchange)}
             detail={
               <List.Item.Detail
-                markdown={exchangeMarkdown(exchange, exchange.status === "streaming" ? chat.activity : undefined)}
+                markdown={exchangeMarkdown(exchange)}
+                metadata={
+                  showDetails && exchange.status !== "streaming" ? (
+                    <ListMetadata exchange={exchange} providerName={providerName} />
+                  ) : undefined
+                }
               />
             }
             actions={actions(exchange)}
@@ -232,19 +249,14 @@ export function ChatView({ chat }: { chat: Chat }) {
         ))
       ) : (
         <List.EmptyView
-          icon={Icon.SpeechBubble}
+          icon={{ source: "empty-icon.png" }}
           title={message ? "Press ↵ to Send" : "Start a Chat"}
-          description={`Type your message in the search bar. Answers come from ${modelLabel(chat)}.`}
+          description={`${choiceSummary(modelSettings.choice, providerName)}\nType your message above · ⌘K for model settings`}
           actions={actions()}
         />
       )}
     </List>
   );
-}
-
-export function modelLabel(chat: Chat): string {
-  const model = chat.models.find((candidate) => candidate.id === chat.model);
-  return model ? `${chat.provider.name} (${model.name})` : chat.provider.name;
 }
 
 function statusIcon(exchange: Exchange): Image.ImageLike {

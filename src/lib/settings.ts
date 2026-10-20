@@ -6,7 +6,6 @@ import type { Provider, ProviderId } from "../providers/types";
 export interface Settings {
   providerId: ProviderId;
   codexPath?: string;
-  reasoningEffort?: string;
   webSearch: boolean;
   customInstructions?: string;
 }
@@ -16,10 +15,6 @@ export function getSettings(): Settings {
   return {
     providerId: preferences.provider ?? "codex",
     codexPath: preferences.codexPath?.trim() || undefined,
-    reasoningEffort:
-      preferences.reasoningEffort && preferences.reasoningEffort !== "default"
-        ? preferences.reasoningEffort
-        : undefined,
     webSearch: preferences.webSearch ?? true,
     customInstructions: preferences.customInstructions?.trim() || undefined,
   };

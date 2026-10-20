@@ -13,15 +13,20 @@ export interface GetAccountResponse {
   requiresOpenaiAuth: boolean;
 }
 
+export interface Model {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  hidden: boolean;
+  isDefault: boolean;
+  supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
+  defaultReasoningEffort: string;
+  serviceTiers?: { id: string; name: string; description: string }[];
+}
+
 export interface ModelListResponse {
-  data: {
-    id: string;
-    model: string;
-    displayName: string;
-    description: string;
-    hidden: boolean;
-    isDefault: boolean;
-  }[];
+  data: Model[];
   nextCursor: string | null;
 }
 
@@ -48,6 +53,9 @@ export interface TurnStartParams {
   input: { type: "text"; text: string; text_elements: [] }[];
   model?: string | null;
   effort?: string | null;
+  summary?: "auto" | "concise" | "detailed" | "none" | null;
+  /** Service tier for this turn only; "default" is standard speed. */
+  serviceTierForTurn?: string | null;
 }
 
 export interface Turn {
@@ -60,23 +68,53 @@ export interface TurnStartResponse {
   turn: Turn;
 }
 
+export type WebSearchAction =
+  | { type: "search"; query: string | null; queries: string[] | null }
+  | { type: "openPage"; url: string | null }
+  | { type: "findInPage"; url: string | null; pattern: string | null }
+  | { type: "other" };
+
 export type ThreadItem =
   | { type: "agentMessage"; id: string; text: string }
-  | { type: "reasoning"; id: string }
-  | { type: "webSearch"; id: string; query: string }
-  | { type: "commandExecution"; id: string; command: string }
-  | { type: "mcpToolCall"; id: string; server: string; tool: string }
-  | { type: "fileChange"; id: string }
-  | { type: string; id: string };
+  | { type: "reasoning"; id: string; summary: string[] }
+  | { type: "webSearch"; id: string; query: string; action: WebSearchAction | null }
+  | { type: "commandExecution"; id: string; command: string; status: string; exitCode: number | null }
+  | { type: "mcpToolCall"; id: string; server: string; tool: string; status: string; error: unknown }
+  | { type: "fileChange"; id: string; status: string }
+  | { type: "other"; id: string };
+
+export interface TokenUsageBreakdown {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+}
+
+export interface RateLimitWindow {
+  usedPercent: number;
+  windowDurationMins: number | null;
+  resetsAt: number | null;
+}
+
+export interface RateLimitSnapshot {
+  primary: RateLimitWindow | null;
+  secondary: RateLimitWindow | null;
+}
+
+type TurnScoped<T> = { threadId: string; turnId: string } & T;
 
 /** Notifications the provider reacts to. Every other notification is ignored. */
 export type ServerNotification =
   | { method: "turn/started"; params: { threadId: string; turn: Turn } }
   | { method: "turn/completed"; params: { threadId: string; turn: Turn } }
-  | { method: "item/started"; params: { threadId: string; turnId: string; item: ThreadItem } }
-  | { method: "item/completed"; params: { threadId: string; turnId: string; item: ThreadItem } }
-  | { method: "item/agentMessage/delta"; params: { threadId: string; turnId: string; itemId: string; delta: string } }
+  | { method: "item/started"; params: TurnScoped<{ item: ThreadItem }> }
+  | { method: "item/completed"; params: TurnScoped<{ item: ThreadItem }> }
+  | { method: "item/agentMessage/delta"; params: TurnScoped<{ itemId: string; delta: string }> }
   | {
-      method: "error";
-      params: { threadId: string; turnId: string; willRetry: boolean; error: { message: string } };
-    };
+      method: "item/reasoning/summaryTextDelta";
+      params: TurnScoped<{ itemId: string; delta: string; summaryIndex: number }>;
+    }
+  | { method: "thread/tokenUsage/updated"; params: TurnScoped<{ tokenUsage: { last: TokenUsageBreakdown } }> }
+  | { method: "error"; params: TurnScoped<{ willRetry: boolean; error: { message: string } }> }
+  | { method: "account/rateLimits/updated"; params: { threadId?: undefined; rateLimits: RateLimitSnapshot } };

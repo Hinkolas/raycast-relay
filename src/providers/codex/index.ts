@@ -6,13 +6,16 @@ import {
   type Provider,
   type SendRequest,
   type SendResult,
+  type UsageLimit,
 } from "../types";
+import { TurnActivity } from "./activity";
 import { AppServerConnection } from "./app-server";
 import { locateCodex } from "./locate";
 import type {
   GetAccountResponse,
+  Model,
   ModelListResponse,
-  ThreadItem,
+  RateLimitSnapshot,
   ThreadStartParams,
   ThreadStartResponse,
   TurnStartParams,
@@ -46,6 +49,9 @@ export class CodexProvider implements Provider {
 
   private connection: Promise<AppServerConnection> | undefined;
   private readonly threads = new Map<string, LiveThread>();
+  /** Raw model list, needed to map "fast" onto each model's service tier. */
+  private models: Model[] = [];
+  private limits: UsageLimit[] | undefined;
 
   constructor(private readonly options: CodexProviderOptions) {}
 
@@ -56,6 +62,7 @@ export class CodexProvider implements Provider {
   async listModels(): Promise<ModelInfo[]> {
     const connection = await this.connect();
     const { data } = await connection.request<ModelListResponse>("model/list", {});
+    this.models = data;
     return data
       .filter((model) => !model.hidden)
       .map((model) => ({
@@ -63,13 +70,19 @@ export class CodexProvider implements Provider {
         name: model.displayName,
         description: model.description,
         isDefault: model.isDefault,
+        reasoningEfforts: model.supportedReasoningEfforts.map((option) => ({
+          id: option.reasoningEffort,
+          description: option.description,
+        })),
+        defaultReasoningEffort: model.defaultReasoningEffort,
+        fastMode: model.serviceTiers?.[0] ? { description: model.serviceTiers[0].description } : undefined,
       }));
   }
 
   async send(request: SendRequest): Promise<SendResult> {
     const connection = await this.connect();
     const threadId = await this.ensureThread(connection, request);
-    if (request.signal?.aborted) return { text: "", interrupted: true };
+    if (request.signal?.aborted) return { text: "", steps: [], interrupted: true };
 
     try {
       const result = await this.runTurn(connection, threadId, request);
@@ -123,11 +136,21 @@ export class CodexProvider implements Provider {
       );
     }
 
+    connection.onNotification((notification) => {
+      if (notification.method === "account/rateLimits/updated") {
+        this.limits = toUsageLimits(notification.params.rateLimits) ?? this.limits;
+      }
+    });
+
     const { account, requiresOpenaiAuth } = await connection.request<GetAccountResponse>("account/read", {});
     if (requiresOpenaiAuth && !account) {
       connection.close();
       throw new ProviderError("Codex isn't signed in", "Run `codex login` in your terminal, then try again.");
     }
+    connection.request<{ rateLimits: RateLimitSnapshot }>("account/rateLimits/read", {}).then(
+      ({ rateLimits }) => (this.limits ??= toUsageLimits(rateLimits)),
+      () => undefined, // Not available for API-key sign-ins.
+    );
     return connection;
   }
 
@@ -164,22 +187,13 @@ export class CodexProvider implements Provider {
 
   private runTurn(connection: AppServerConnection, threadId: string, request: SendRequest): Promise<SendResult> {
     return new Promise<SendResult>((resolve, reject) => {
-      // Agent messages by item id, in the order they started. A turn can contain several (e.g. before and
-      // after a web search); together they form the answer.
-      const messages = new Map<string, string>();
+      const activity = new TurnActivity();
       let turnId: string | undefined;
-      let activity: string | undefined;
       let interruptRequested = false;
       let lastError: string | undefined;
       let settled = false;
 
-      const answer = () =>
-        [...messages.values()]
-          .map((text) => text.trim())
-          .filter(Boolean)
-          .join("\n\n");
-      const emit = () => request.onUpdate?.({ text: answer(), activity });
-
+      const emit = () => request.onUpdate?.({ text: activity.text, steps: activity.stepList });
       const interrupt = () => {
         if (turnId) connection.request("turn/interrupt", { threadId, turnId }).catch(() => undefined);
       };
@@ -208,48 +222,30 @@ export class CodexProvider implements Provider {
           case "turn/started":
             setTurnId(notification.params.turn.id);
             break;
-          case "item/started": {
-            const { item } = notification.params;
-            if (item.type === "agentMessage") {
-              messages.set(item.id, messages.get(item.id) ?? "");
-            } else {
-              activity = describeActivity(item) ?? activity;
-              emit();
-            }
-            break;
-          }
-          case "item/agentMessage/delta": {
-            const { itemId, delta } = notification.params;
-            messages.set(itemId, (messages.get(itemId) ?? "") + delta);
-            activity = undefined;
-            emit();
-            break;
-          }
-          case "item/completed": {
-            const { item } = notification.params;
-            if (item.type === "agentMessage" && "text" in item) messages.set(item.id, item.text);
-            activity = undefined;
-            emit();
-            break;
-          }
           case "error":
-            if (notification.params.willRetry) {
-              activity = "Reconnecting…";
-              emit();
-            } else {
-              lastError = notification.params.error.message;
-            }
+            if (!notification.params.willRetry) lastError = notification.params.error.message;
             break;
           case "turn/completed": {
             const { turn } = notification.params;
+            activity.finish(turn.status === "failed" ? "failed" : "done");
             if (turn.status === "failed") {
               const message = turn.error?.message ?? lastError ?? "Codex couldn't finish the answer";
               settle(() => reject(new ProviderError(message, turn.error?.additionalDetails ?? undefined)));
             } else {
-              settle(() => resolve({ text: answer(), interrupted: turn.status === "interrupted" }));
+              settle(() =>
+                resolve({
+                  text: activity.text,
+                  steps: activity.stepList,
+                  usage: activity.tokenUsage,
+                  limits: this.limits,
+                  interrupted: turn.status === "interrupted",
+                }),
+              );
             }
             break;
           }
+          default:
+            if (activity.apply(notification)) emit();
         }
       });
       const stopWatchingExit = connection.onExit((error) => settle(() => reject(error)));
@@ -260,6 +256,8 @@ export class CodexProvider implements Provider {
         input: [{ type: "text", text: request.prompt, text_elements: [] }],
         model: request.model ?? null,
         effort: request.reasoningEffort ?? null,
+        summary: "auto",
+        serviceTierForTurn: this.serviceTier(request),
       };
       connection.request<TurnStartResponse>("turn/start", params).then(
         ({ turn }) => setTurnId(turn.id),
@@ -267,23 +265,25 @@ export class CodexProvider implements Provider {
       );
     });
   }
+
+  /** "Fast" maps onto the model's first non-default service tier (currently "priority"). */
+  private serviceTier(request: SendRequest): string {
+    if (!request.fast) return "default";
+    const model = this.models.find((candidate) =>
+      request.model ? candidate.model === request.model : candidate.isDefault,
+    );
+    return model?.serviceTiers?.[0]?.id ?? "default";
+  }
 }
 
-function describeActivity(item: ThreadItem): string | undefined {
-  switch (item.type) {
-    case "reasoning":
-      return "Thinking…";
-    case "webSearch":
-      return "Searching the web…";
-    case "commandExecution":
-      return "Running a command…";
-    case "mcpToolCall":
-      return "server" in item ? `Using ${item.server}…` : "Using a tool…";
-    case "fileChange":
-      return "Editing files…";
-    default:
-      return undefined;
-  }
+function toUsageLimits(snapshot: RateLimitSnapshot): UsageLimit[] | undefined {
+  const windows = [snapshot.primary, snapshot.secondary].filter((window) => window !== null);
+  if (windows.length === 0) return undefined;
+  return windows.map((window) => ({
+    usedPercent: window.usedPercent,
+    windowMinutes: window.windowDurationMins ?? undefined,
+    resetsAt: window.resetsAt ?? undefined,
+  }));
 }
 
 /** Seeds a fresh thread with a conversation that was started in an earlier session. */

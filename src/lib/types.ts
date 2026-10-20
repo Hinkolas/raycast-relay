@@ -1,6 +1,16 @@
-import type { ProviderId } from "../providers/types";
+import type { AgentStep, ProviderId, TokenUsage, UsageLimit } from "../providers/types";
 
 export type ExchangeStatus = "streaming" | "done" | "cancelled" | "error";
+
+/** The model configuration an answer was requested with. */
+export interface ModelChoice {
+  /** Model id; `undefined` is the provider default. */
+  model?: string;
+  modelName?: string;
+  /** Reasoning effort id; `undefined` is the model default. */
+  effort?: string;
+  fast: boolean;
+}
 
 /** One question and its answer. Chats are a list of exchanges, which maps directly onto Raycast list items. */
 export interface Exchange {
@@ -9,9 +19,12 @@ export interface Exchange {
   answer: string;
   status: ExchangeStatus;
   error?: string;
-  /** Model that answered; `undefined` when the provider default was used. */
-  model?: string;
   createdAt: number;
+  completedAt?: number;
+  choice?: ModelChoice;
+  steps?: AgentStep[];
+  usage?: TokenUsage;
+  limits?: UsageLimit[];
 }
 
 export interface Conversation {

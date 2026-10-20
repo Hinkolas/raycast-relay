@@ -13,11 +13,39 @@ export interface HistoryTurn {
   answer: string;
 }
 
+export type StepKind = "thinking" | "search" | "browse" | "command" | "tool" | "edit";
+
+/** Something the agent did while answering, e.g. a web search or a reasoning phase. */
+export interface AgentStep {
+  id: string;
+  kind: StepKind;
+  /** Short description, e.g. "Searched the web" or a reasoning summary title like "Comparing sources". */
+  title: string;
+  /** Extra context such as the search query or the page that was read. */
+  detail?: string;
+  status: "running" | "done" | "failed";
+  startedAt: number;
+  completedAt?: number;
+}
+
+export interface TokenUsage {
+  input: number;
+  cachedInput: number;
+  output: number;
+  reasoning: number;
+}
+
+/** How much of a subscription's usage window is used up, e.g. 12% of the weekly limit. */
+export interface UsageLimit {
+  usedPercent: number;
+  windowMinutes?: number;
+  resetsAt?: number;
+}
+
 export interface StreamUpdate {
   /** The full answer text received so far. */
   text: string;
-  /** What the agent is doing right now when it isn't writing, e.g. "Searching the web…". */
-  activity?: string;
+  steps: AgentStep[];
 }
 
 export interface SendRequest {
@@ -28,8 +56,10 @@ export interface SendRequest {
   prompt: string;
   /** Model id; `undefined` uses the provider's own default. */
   model?: string;
-  /** Reasoning effort; `undefined` uses the model's default. */
+  /** Reasoning effort id from `ModelInfo.reasoningEfforts`; `undefined` uses the model's default. */
   reasoningEffort?: string;
+  /** Use the model's faster (usually more expensive) service tier, when it has one. */
+  fast: boolean;
   /** System instructions that replace the harness' coding-agent prompt. */
   instructions: string;
   webSearch: boolean;
@@ -39,8 +69,16 @@ export interface SendRequest {
 
 export interface SendResult {
   text: string;
+  steps: AgentStep[];
+  usage?: TokenUsage;
+  limits?: UsageLimit[];
   /** True when the turn was stopped through `signal` before it finished. */
   interrupted: boolean;
+}
+
+export interface ReasoningEffortOption {
+  id: string;
+  description?: string;
 }
 
 export interface ModelInfo {
@@ -48,6 +86,10 @@ export interface ModelInfo {
   name: string;
   description?: string;
   isDefault: boolean;
+  reasoningEfforts: ReasoningEffortOption[];
+  defaultReasoningEffort?: string;
+  /** Present when the model offers a fast mode; describes its trade-off, e.g. "2x speed, increased usage". */
+  fastMode?: { description?: string };
 }
 
 export interface Provider {

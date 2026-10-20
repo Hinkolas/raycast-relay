@@ -40,7 +40,7 @@
       "name": "chat",
       "title": "Quick Chat",
       "subtitle": "Agent Proxy",
-      "description": "Chat with AI inside Raycast. Switch between earlier chats from the dropdown.",
+      "description": "Chat with AI inside Raycast. Optionally start with a message; switch between earlier chats from the dropdown.",
       "keywords": [
         "ai",
         "chat",
@@ -48,7 +48,15 @@
         "gpt",
         "chatgpt"
       ],
-      "mode": "view"
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "message",
+          "placeholder": "Message",
+          "type": "text",
+          "required": false
+        }
+      ]
     }
   ],
   "preferences": [
@@ -73,32 +81,6 @@
       "type": "textfield",
       "required": false,
       "placeholder": "/opt/homebrew/bin/codex"
-    },
-    {
-      "name": "reasoningEffort",
-      "title": "Reasoning Effort",
-      "description": "How long the model thinks before answering. Lower is faster.",
-      "type": "dropdown",
-      "required": false,
-      "default": "default",
-      "data": [
-        {
-          "title": "Model Default",
-          "value": "default"
-        },
-        {
-          "title": "Low",
-          "value": "low"
-        },
-        {
-          "title": "Medium",
-          "value": "medium"
-        },
-        {
-          "title": "High",
-          "value": "high"
-        }
-      ]
     },
     {
       "name": "webSearch",
