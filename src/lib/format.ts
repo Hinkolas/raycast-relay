@@ -43,7 +43,7 @@ function stepIcon(kind: StepKind, status: AgentStep["status"] = "done"): string 
 
 /**
  * The question as a heading, what the agent did, and the answer.
- * While nothing has been written yet, every step is listed live; afterwards they collapse into one line.
+ * While nothing has been written yet, one status line follows the latest step; afterwards it becomes a summary.
  */
 export function exchangeMarkdown(exchange: Exchange): string {
   const parts = [questionMarkdown(exchange.prompt)];
@@ -51,7 +51,7 @@ export function exchangeMarkdown(exchange: Exchange): string {
   const isStreaming = exchange.status === "streaming";
 
   if (isStreaming && !exchange.answer) {
-    parts.push(timelineMarkdown(steps));
+    parts.push(statusLine(steps));
   } else {
     const summary = stepsSummary(steps.filter((step) => step.status !== "running"));
     if (summary) parts.push(`${stepIcon(summary.kind)} *${summary.text}*`);
@@ -81,11 +81,11 @@ function questionMarkdown(prompt: string): string {
     .join("\n");
 }
 
-function timelineMarkdown(steps: AgentStep[]): string {
+/** The step in progress, or the latest one while the agent decides what to do next. */
+function statusLine(steps: AgentStep[]): string {
   const visible = visibleSteps(steps);
-  if (visible.length === 0) return `${stepIcon("thinking", "running")} **Thinking…**`;
-  // Hard line breaks keep the steps together as one compact block.
-  return visible.slice(-8).map(stepLine).join("  \n");
+  const current = visible.findLast((step) => step.status === "running") ?? visible.at(-1);
+  return current ? stepLine(current) : `${stepIcon("thinking", "running")} **Thinking…**`;
 }
 
 /** Drops brief reasoning without a summary; it says nothing beyond "Thought". */
@@ -101,7 +101,8 @@ function visibleSteps(steps: AgentStep[]): AgentStep[] {
 
 function stepLine(step: AgentStep): string {
   const title = step.status === "running" ? `**${step.title}…**` : step.title;
-  const detail = step.detail ? ` · *${escapeInline(truncate(step.detail, 90))}*` : "";
+  // Short enough to keep the status on a single line.
+  const detail = step.detail ? ` · *${escapeInline(truncate(step.detail, 48))}*` : "";
   return `${stepIcon(step.kind, step.status)} ${title}${detail}`;
 }
 

@@ -33,10 +33,9 @@ function summaryRows(exchange: Exchange, providerName: string): Row[] {
 
 /** Short link texts like "Release" or "npm" say little without the site they point to. */
 function sourceLabel(source: Source): string {
-  // Pages that were only read, not cited, are labeled by their URL, which keeps its case.
+  // Pages that were only read, not cited, are already labeled by their URL.
   if (source.title.startsWith(source.domain)) return truncate(source.title, 32);
-  const title = source.title.charAt(0).toUpperCase() + source.title.slice(1);
-  return truncate(title.length < 12 ? `${title} · ${source.domain}` : title, 32);
+  return truncate(source.title.length < 12 ? `${source.title} · ${source.domain}` : source.title, 32);
 }
 
 function truncate(text: string, length: number): string {
